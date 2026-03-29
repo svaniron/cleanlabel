@@ -68,12 +68,12 @@ export default function Home() {
     }
   }, [imageBase64]);
 
-  const runAnalysis = useCallback(async (productName) => {
+  const runAnalysis = useCallback(async (productName, returnScreen = "manual") => {
     setScreen("processing");
     setError(null);
     setStep(2);
-    setStepMsg(`Searching for "${productName}" ingredients…`);
-    await new Promise(r => setTimeout(r, 500));
+    setStepMsg(`Looking up "${productName}"…`);
+    await new Promise(r => setTimeout(r, 400));
     setStep(3);
     setStepMsg("Analyzing additives and risk levels…");
     try {
@@ -83,12 +83,15 @@ export default function Home() {
         body: JSON.stringify({ productName }),
       });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      if (data.error) {
+        const msg = data.hint ? `${data.error}\n\nHint: ${data.hint}` : data.error;
+        throw new Error(msg);
+      }
       setResults(data);
       setScreen("results");
     } catch (err) {
       setError(err.message || "Analysis failed. Please try again.");
-      setScreen("confirm");
+      setScreen(returnScreen);
     }
   }, []);
 
@@ -230,7 +233,7 @@ export default function Home() {
               <p style={{ color: "#444", fontSize: 12, marginBottom: 20 }}>Examples: "Spam Classic" · "Oreo Original" · "Doritos Nacho Cheese"</p>
               <input
                 type="text" value={productInput} onChange={e => setProductInput(e.target.value)} autoFocus
-                onKeyDown={e => e.key === "Enter" && productInput.trim() && runAnalysis(productInput.trim())}
+                onKeyDown={e => e.key === "Enter" && productInput.trim() && runAnalysis(productInput.trim(), "manual")}
                 placeholder="e.g. Gatorade Fruit Punch"
                 style={{
                   width: "100%", background: "#111", border: "1px solid #2a2a2a", borderRadius: 12,
@@ -239,7 +242,7 @@ export default function Home() {
                 }}
               />
               {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginTop: 8 }}>{error}</div>}
-              <button onClick={() => productInput.trim() && runAnalysis(productInput.trim())} disabled={!productInput.trim()} style={{
+              <button onClick={() => productInput.trim() && runAnalysis(productInput.trim(), "manual")} disabled={!productInput.trim()} style={{
                 ...btnP, marginTop: 16,
                 background: productInput.trim() ? "#c8f542" : "#1e1e1e",
                 color: productInput.trim() ? "#0a0a0a" : "#444",
@@ -274,7 +277,7 @@ export default function Home() {
                 }} />
               </div>
               {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginBottom: 12 }}>{error}</div>}
-              <button onClick={() => { const v = document.getElementById("confirm-input").value.trim(); if (v) runAnalysis(v); }} style={btnP}>
+              <button onClick={() => { const v = document.getElementById("confirm-input").value.trim(); if (v) runAnalysis(v, "confirm"); }} style={btnP}>
                 ✅ Yes, find ingredients
               </button>
               <button onClick={() => setScreen("camera")} style={{ ...btnS, marginTop: 10 }}>← Retake photo</button>
