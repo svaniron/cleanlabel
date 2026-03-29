@@ -1,54 +1,19 @@
+function extractJSON(text) {
+  // Try direct parse first
+  try { return JSON.parse(text); } catch {}
+  // Try extracting JSON block from markdown or mixed text
+  const match = text.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch {}
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { text, imageBase64 } = req.body;
-
-  if (!text && !imageBase64) {
-    return res.status(400).json({ error: "No input provided" });
-  }
-
-  const SYSTEM_PROMPT = `You are a food safety expert and nutritional scientist specializing in food additives.
-When given an ingredient list (either typed or extracted from an image), analyze it and identify food additives.
-
-For each additive found, return a JSON array with objects containing:
-- name: the additive name
-- code: E-number or common code if applicable (or null)
-- risk_level: "high", "moderate", "low", or "safe"
-- concern: one sentence describing the main health concern
-- banned_in: array of regions/countries where it's banned or restricted (e.g., ["EU", "Norway", "Japan"])
-- evidence: one sentence about the research evidence
-- alternatives: one example of a cleaner alternative ingredient
-
-Also include a top-level "summary" string (2 sentences max) and "scan_score" from 0-100 (100 = perfectly clean).
-
-Focus especially on: artificial dyes (Red 40, Yellow 5/6, Blue 1/2), preservatives (BHA, BHT, TBHQ, sodium nitrite),
-artificial sweeteners (aspartame, saccharin, acesulfame-K), emulsifiers (carrageenan, polysorbate 80),
-brominated vegetable oil (BVO), potassium bromate, propyl gallate, azodicarbonamide.
-
-Respond ONLY with valid JSON. No markdown, no backticks, no preamble.`;
-
-  let messages;
-
-  if (imageBase64) {
-    messages = [{
-      role: "user",
-      content: [
-        {
-          type: "image",
-          source: { type: "base64", media_type: "image/jpeg", data: imageBase64 }
-        },
-        {
-          type: "text",
-          text: "Extract the ingredients list from this food product label image, then analyze all food additives found. Return the JSON analysis."
-        }
-      ]
-    }];
-  } else {
-    messages = [{
-      role: "user",
-      content: `Analyze these ingredients for food additives:\n\n${text}`
-    }];
-  }
+  const { imageBase64 } = req.body;
+  if (!imageBase64) return res.status(400).json({ error: "No image provided" });
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -59,25 +24,46 @@ Respond ONLY with valid JSON. No markdown, no backticks, no preamble.`;
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-opus-4-5",
-        max_tokens: 1500,
-        system: SYSTEM_PROMPT,
-        messages
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        system: `You identify food products from photos. Always respond with ONLY a JSON object — no other text, no markdown fences, no explanation before or after.
+
+Format:
+{"brand":"Spam","product":"Classic","full_name":"Spam Classic","confidence":"high"}
+
+If unsure, use confidence "low". Always output valid JSON and nothing else.`,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } },
+            { type: "text", text: "Identify this food product. Output only JSON." }
+          ]
+        }]
       })
     });
 
     const data = await response.json();
 
+    // Surface Anthropic errors clearly
     if (data.error) {
-      return res.status(500).json({ error: data.error.message });
+      return res.status(500).json({ error: `Anthropic API error: ${data.error.message}` });
     }
 
-    const raw = data.content?.map(b => b.text || "").join("").trim();
-    const parsed = JSON.parse(raw);
+    const raw = (data.content || []).map(b => b.text || "").join("").trim();
+
+    if (!raw) {
+      return res.status(500).json({ error: "Empty response from API. Check your API key in Vercel environment variables." });
+    }
+
+    const parsed = extractJSON(raw);
+    if (!parsed) {
+      return res.status(500).json({ error: `Could not parse response: ${raw.slice(0, 200)}` });
+    }
+
     return res.status(200).json(parsed);
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Analysis failed. Please try again." });
+    console.error("identify error:", err);
+    return res.status(500).json({ error: err.message || "Server error in identify route" });
   }
 }
