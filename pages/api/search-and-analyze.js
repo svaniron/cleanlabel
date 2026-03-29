@@ -1,34 +1,45 @@
-const ANALYSIS_SYSTEM = `You are a food safety expert specializing in food additives and their health risks.
+function extractJSON(text) {
+  try { return JSON.parse(text); } catch {}
+  const match = text.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch {}
+  }
+  return null;
+}
 
-Given a product name and its ingredients list (which you will search for), analyze ALL food additives present.
+const SYSTEM = `You are a food safety expert with comprehensive knowledge of food product ingredients.
 
-Return ONLY a valid JSON object with this exact structure:
+When given a product name, do the following:
+1. Recall the known ingredients for that product from your training knowledge
+2. Identify all food additives in those ingredients
+3. Return ONLY a valid JSON object — no text before or after, no markdown fences
+
+JSON format:
 {
-  "product_name": "full product name found",
-  "ingredients_source": "where you found the ingredients (e.g. 'Official Spam website')",
-  "ingredients_raw": "the full ingredients text you found",
+  "product_name": "exact product name",
+  "ingredients_source": "Claude knowledge base",
+  "ingredients_raw": "full ingredients list as text",
   "scan_score": 0-100,
-  "summary": "2 sentence summary of findings",
+  "summary": "2 sentence summary",
   "additives": [
     {
       "name": "Red 40",
-      "code": "E129 or null",
-      "risk_level": "high | moderate | low | safe",
-      "concern": "one sentence main health concern",
-      "banned_in": ["EU", "Norway"],
-      "evidence": "one sentence about research",
-      "alternatives": "cleaner alternative ingredient"
+      "code": "E129",
+      "risk_level": "high",
+      "concern": "one sentence",
+      "banned_in": ["EU","Norway"],
+      "evidence": "one sentence",
+      "alternatives": "cleaner option"
     }
   ]
 }
 
-scan_score: 100 = perfectly clean, 0 = very concerning.
-Focus on: artificial dyes (Red 40, Yellow 5/6, Blue 1/2), preservatives (BHA, BHT, TBHQ, sodium nitrite), 
-artificial sweeteners (aspartame, saccharin, acesulfame-K), emulsifiers (carrageenan, polysorbate 80), 
-BVO, potassium bromate, propyl gallate, azodicarbonamide, titanium dioxide, HFCS, MSG.
-
-If a common ingredient is NOT an additive (like sugar, salt, flour, water), do NOT include it.
-Respond ONLY with valid JSON. No markdown, no backticks, no preamble.`;
+risk_level must be one of: "high", "moderate", "low", "safe"
+scan_score: 100 = perfectly clean, 0 = very concerning
+Only flag actual additives — not natural ingredients like sugar, salt, flour, water, spices.
+Focus on: artificial dyes (Red 40, Yellow 5/6, Blue 1/2), preservatives (BHA, BHT, TBHQ, sodium nitrite), artificial sweeteners (aspartame, saccharin, acesulfame-K), emulsifiers (carrageenan, polysorbate 80), BVO, potassium bromate, azodicarbonamide, titanium dioxide, HFCS, MSG, natural flavors if concerning.
+If you don't know the exact ingredients, state that in ingredients_raw and provide your best analysis based on typical formulations.
+Output ONLY the JSON object. Nothing else.`;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -45,39 +56,47 @@ export default async function handler(req, res) {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-opus-4-5",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1500,
-        system: ANALYSIS_SYSTEM,
-        tools: [{
-          type: "web_search_20250305",
-          name: "web_search"
-        }],
+        system: SYSTEM,
         messages: [{
           role: "user",
-          content: `Search the web for the complete ingredients list of "${productName}". 
-Look for the official brand website, or reliable sources like Open Food Facts, Eat This Much, or the USDA database.
-Once you find the ingredients, analyze all food additives present and return the JSON analysis.`
+          content: `Analyze this product for food additives: "${productName}". Return only the JSON object.`
         }]
       })
     });
 
     const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
 
-    // Extract the final text response (Claude may have used web_search tool first)
-    const textBlocks = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim();
-
-    if (!textBlocks) {
-      return res.status(500).json({ error: "No analysis returned." });
+    // Surface Anthropic errors clearly
+    if (data.error) {
+      return res.status(500).json({
+        error: `Anthropic API error: ${data.error.message}`,
+        hint: "Check that ANTHROPIC_API_KEY is set correctly in Vercel → Settings → Environment Variables"
+      });
     }
 
-    // Strip any markdown code fences if present
-    const clean = textBlocks.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
+    const raw = (data.content || []).map(b => b.text || "").join("").trim();
+
+    if (!raw) {
+      return res.status(500).json({
+        error: "Empty response from API.",
+        hint: "Your API key may be missing or invalid. Check Vercel → Settings → Environment Variables."
+      });
+    }
+
+    const parsed = extractJSON(raw);
+    if (!parsed) {
+      return res.status(500).json({
+        error: `Could not parse API response.`,
+        raw: raw.slice(0, 300)
+      });
+    }
+
     return res.status(200).json(parsed);
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Analysis failed. Product ingredients may not be available online." });
+    console.error("search-and-analyze error:", err);
+    return res.status(500).json({ error: err.message || "Server error" });
   }
 }
