@@ -34,15 +34,35 @@ export default function Home() {
   const handleImage = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target.result;
-      setImagePreview(dataUrl);
-      setImageBase64(dataUrl.split(",")[1]);
+    setError(null);
+
+    // Convert any format (including HEIC) to JPEG via canvas
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      // Resize to max 1200px wide to keep payload small
+      const MAX = 1200;
+      let w = img.width, h = img.height;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      URL.revokeObjectURL(objectUrl);
+
+      setImagePreview(jpegDataUrl);
+      setImageBase64(jpegDataUrl.split(",")[1]);
       setScreen("camera");
-      setError(null);
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      setError("Could not read image. Please try again.");
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.src = objectUrl;
   };
 
   const runIdentify = useCallback(async () => {
@@ -51,7 +71,7 @@ export default function Home() {
     setResults(null);
     setExpanded({});
     setStep(1);
-    setStepMsg("Reading product label…");
+    setStepMsg("Identifying product…");
     try {
       const res = await fetch("/api/identify", {
         method: "POST",
