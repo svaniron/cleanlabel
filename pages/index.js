@@ -36,24 +36,17 @@ export default function Home() {
     if (!file) return;
     setError(null);
 
-    // Convert any format (including HEIC) to JPEG via canvas
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
-      // Resize to max 1200px wide to keep payload small
       const MAX = 1200;
       let w = img.width, h = img.height;
       if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
-
       const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, w, h);
-
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
       const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.85);
       URL.revokeObjectURL(objectUrl);
-
       setImagePreview(jpegDataUrl);
       setImageBase64(jpegDataUrl.split(",")[1]);
       setScreen("camera");
@@ -183,7 +176,7 @@ export default function Home() {
                   Point. Scan.<br /><span style={{ color: "#555" }}>Know the truth.</span>
                 </h1>
                 <p style={{ color: "#777", fontSize: 15, lineHeight: 1.6 }}>
-                  Photograph any food product. We identify it, look up the ingredients online,
+                  Photograph any food product. We identify it, look up the real ingredients online,
                   and show every additive that's banned in other countries — and why.
                 </p>
               </div>
@@ -192,7 +185,7 @@ export default function Home() {
                 {[
                   ["📷","Snap a photo","of any product"],
                   ["🔍","We identify","brand & product name"],
-                  ["🌐","Fetch ingredients","from official sources"],
+                  ["🌐","Real ingredients","from live databases"],
                   ["⚗️","Get the truth","additives + risk levels"],
                 ].map(([icon, t, s]) => (
                   <div key={t} style={{ background: "#111", borderRadius: 10, padding: "14px 16px", border: "1px solid #1e1e1e" }}>
@@ -235,7 +228,7 @@ export default function Home() {
               <div style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #2a2a2a", marginBottom: 20, maxHeight: 300 }}>
                 <img src={imagePreview} alt="Product" style={{ width: "100%", objectFit: "cover", display: "block" }} />
               </div>
-              {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+              {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>{error}</div>}
               <button onClick={runIdentify} style={btnP}>🔍 Identify This Product</button>
               <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleImage} style={{ display: "none" }} />
               <button onClick={() => fileRef.current?.click()} style={{ ...btnS, marginTop: 10 }}>Retake Photo</button>
@@ -261,7 +254,7 @@ export default function Home() {
                   outline: "none", boxSizing: "border-box",
                 }}
               />
-              {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginTop: 8 }}>{error}</div>}
+              {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginTop: 8, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{error}</div>}
               <button onClick={() => productInput.trim() && runAnalysis(productInput.trim(), "manual")} disabled={!productInput.trim()} style={{
                 ...btnP, marginTop: 16,
                 background: productInput.trim() ? "#c8f542" : "#1e1e1e",
@@ -296,7 +289,7 @@ export default function Home() {
                   fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box",
                 }} />
               </div>
-              {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+              {error && <div style={{ color: "#ff6b6b", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>{error}</div>}
               <button onClick={() => { const v = document.getElementById("confirm-input").value.trim(); if (v) runAnalysis(v, "confirm"); }} style={btnP}>
                 ✅ Yes, find ingredients
               </button>
@@ -343,6 +336,17 @@ export default function Home() {
                 )}
               </div>
 
+              {/* Unverified ingredients warning */}
+              {results.ingredients_warning && (
+                <div style={{
+                  background: "#1a1200", border: "1px solid #3a2800", borderRadius: 10,
+                  padding: "12px 14px", marginBottom: 20,
+                  fontSize: 12, color: "#ff8c00", lineHeight: 1.6,
+                }}>
+                  {results.ingredients_warning}
+                </div>
+              )}
+
               {/* Score */}
               <div style={{ background: "#111", borderRadius: 16, padding: 24, border: "1px solid #1e1e1e", marginBottom: 24, position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, height: 3, borderRadius: "3px 3px 0 0", width: `${results.scan_score}%`, background: scoreColor(results.scan_score) }} />
@@ -363,14 +367,16 @@ export default function Home() {
               {/* Raw ingredients collapsible */}
               {results.ingredients_raw && (
                 <details style={{ marginBottom: 20 }}>
-                  <summary style={{ fontSize: 12, color: "#555", cursor: "pointer", padding: "8px 0", userSelect: "none" }}>View full ingredients list</summary>
+                  <summary style={{ fontSize: 12, color: "#555", cursor: "pointer", padding: "8px 0", userSelect: "none" }}>
+                    View full ingredients list
+                  </summary>
                   <div style={{ marginTop: 8, background: "#0d0d0d", borderRadius: 8, padding: 14, fontSize: 12, color: "#666", lineHeight: 1.7, border: "1px solid #1e1e1e" }}>
                     {results.ingredients_raw}
                   </div>
                 </details>
               )}
 
-              {/* Additives list */}
+              {/* Additives */}
               {results.additives?.length > 0 ? (
                 <div>
                   <div style={{ ...muted, marginBottom: 12 }}>Flagged Additives</div>
