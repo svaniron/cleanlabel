@@ -391,7 +391,7 @@ export default function Home() {
                             <button onClick={() => toggle(i)} style={{ width: "100%", background: "none", border: "none", padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, textAlign: "left" }}>
                               <div style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, ...mono, background: risk.bg, color: risk.text, whiteSpace: "nowrap" }}>{risk.label}</div>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 14, fontWeight: 600 }}>{additive.name}</div>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{additive.name}</div>
                                 {additive.code && <div style={{ fontSize: 11, color: "#555", ...mono }}>{additive.code}</div>}
                               </div>
                               <div style={{ color: "#444" }}>{open ? "▲" : "▼"}</div>
