@@ -54,18 +54,12 @@ async function searchWebForIngredients(productName, apiKey) {
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 800,
-      system: `You are a food research assistant. Your ONLY job is to find the exact, complete, current ingredients list for a food product.
-
-Search the web for the product's official ingredients. Look for:
-1. The brand's official website
-2. The USDA FoodData Central database
-3. Reliable grocery retailer sites (Walmart, Target, Kroger)
+      system: `You are a food research assistant. Find the ingredients list for a food product using ONE web search only.
 
 Return ONLY a JSON object:
 {"product_name":"exact name found","ingredients_raw":"FULL ingredients list exactly as written on the label","source":"where you found it"}
 
-The ingredients_raw must be the complete, verbatim ingredients list — do not summarize or abbreviate.
-If you cannot find the exact ingredients, return {"product_name":"${productName}","ingredients_raw":null,"source":null}
+If not found, return {"product_name":"${productName}","ingredients_raw":null,"source":null}
 Output ONLY valid JSON, nothing else.`,
       tools: [{
         type: "web_search_20250305",
@@ -79,7 +73,10 @@ Output ONLY valid JSON, nothing else.`,
   });
 
   const data = await response.json();
-  if (data.error) throw new Error(`API error: ${data.error.message}`);
+  if (data.error) {
+    if (data.error.type === "rate_limit_error") return null; // fall through to knowledge base
+    throw new Error(`API error: ${data.error.message}`);
+  }
 
   const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
   if (!raw) return null;
